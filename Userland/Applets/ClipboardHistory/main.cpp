@@ -25,6 +25,7 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
 
     TRY(Core::System::pledge("stdio recvfd sendfd rpath"));
     TRY(Core::System::unveil("/res", "r"));
+    TRY(Core::System::unveil("/home/anon/.clipboard", "r"));
     TRY(Core::System::unveil(nullptr, nullptr));
     auto app_icon = TRY(GUI::Icon::try_create_default_icon("edit-copy"sv));
 
@@ -36,6 +37,25 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
     auto table_view = TRY(main_window->try_set_main_widget<GUI::TableView>());
     auto model = ClipboardHistoryModel::create();
     table_view->set_model(model);
+
+    // Load already existing data
+    auto clipboard_file = Core::File::open("/home/anon/.clipboard", Core::OpenMode::ReadOnly).value();
+    auto file_contents = clipboard_file->read_all();
+    auto json_or_error = JsonValue::from_string(file_contents);
+    auto json = json_or_error.release_value();
+
+    if (json_or_error.is_error()) {
+        dbgln("Failed to parse /home/anon/.clipboard");
+    } else {
+        json.as_array().for_each([](JsonValue const& object) {
+            dbgln("Adding  --> {}", object);
+            auto data = object.as_object().get("Data"sv).to_string().bytes();
+            auto mime_type = object.as_object().get("Type"sv).to_string();
+            HashMap<String, String> metadata;
+            // FIXME: Add favorite
+            GUI::Clipboard::the().set_data(data, mime_type, metadata);
+        });
+    }
 
     table_view->on_activation = [&](GUI::ModelIndex const& index) {
         auto& data_and_type = model->item_at(index.row()).data_and_type;
