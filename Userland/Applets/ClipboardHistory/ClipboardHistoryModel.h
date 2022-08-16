@@ -37,6 +37,7 @@ public:
 
     ClipboardItem const& item_at(int index) const { return m_history_items[index]; }
     void remove_item(int index);
+    void add_item(const GUI::Clipboard::DataAndType& item);
 
     // ^GUI::Model
     virtual GUI::Variant data(const GUI::ModelIndex&, GUI::ModelRole) const override;
@@ -46,7 +47,6 @@ public:
 
 private:
     ClipboardHistoryModel();
-    void add_item(const GUI::Clipboard::DataAndType& item);
 
     // ^GUI::Model
     virtual int row_count(const GUI::ModelIndex&) const override { return m_history_items.size(); }

@@ -124,4 +124,25 @@
             name: "num_lock_checkbox"
         }
     }
+
+
+    @GUI::GroupBox {
+        title: "Persistent Clipboard"
+        fixed_height: 60
+        layout: @GUI::HorizontalBoxLayout {
+            margins: [16, 8, 8]
+            spacing: 16
+        }
+
+        @GUI::Label {
+            fixed_width: 32
+            fixed_height: 32
+            icon: "/res/icons/32x32/shutdown.png"
+        }
+
+        @GUI::CheckBox {
+            text: "Preserve clipboard content across reboot"
+            name: "persistent_clipboard"
+        }
+    }
 }

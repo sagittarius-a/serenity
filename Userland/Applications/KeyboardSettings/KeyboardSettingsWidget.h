@@ -35,6 +35,7 @@ private:
     RefPtr<GUI::ListView> m_selected_keymaps_listview;
     RefPtr<GUI::Label> m_active_keymap_label;
     RefPtr<GUI::CheckBox> m_num_lock_checkbox;
+    RefPtr<GUI::CheckBox> m_persistent_clipboard;
     RefPtr<GUI::Button> m_activate_keymap_button;
     RefPtr<GUI::Button> m_add_keymap_button;
     RefPtr<GUI::Button> m_remove_keymap_button;

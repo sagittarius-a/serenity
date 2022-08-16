@@ -251,6 +251,12 @@ KeyboardSettingsWidget::KeyboardSettingsWidget()
     m_num_lock_checkbox->on_checked = [&](auto) {
         set_modified(true);
     };
+
+    m_persistent_clipboard = find_descendant_of_type_named<GUI::CheckBox>("persistent_clipboard");
+    m_persistent_clipboard->set_checked(Config::read_bool("KeyboardSettings"sv, "StartupEnable"sv, "PersistentClipboard"sv, true));
+    m_persistent_clipboard->on_checked = [&](auto) {
+        set_modified(true);
+    };
 }
 
 KeyboardSettingsWidget::~KeyboardSettingsWidget()
@@ -278,6 +284,7 @@ void KeyboardSettingsWidget::apply_settings()
     }
     m_initial_active_keymap = m_keymaps_list_model.active_keymap();
     Config::write_bool("KeyboardSettings"sv, "StartupEnable"sv, "NumLock"sv, m_num_lock_checkbox->is_checked());
+    Config::write_bool("KeyboardSettings"sv, "StartupEnable"sv, "PersistentClipboard"sv, m_persistent_clipboard->is_checked());
 }
 
 void KeyboardSettingsWidget::set_keymaps(Vector<String> const& keymaps, String const& active_keymap)
