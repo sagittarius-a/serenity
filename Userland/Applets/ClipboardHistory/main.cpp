@@ -61,6 +61,10 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
         entry_context_menu->popup(event.screen_position());
     };
 
+    // Saved x and y positions since their values will be 0 if we hide the window
+    int saved_x = main_window->x();
+    int saved_y = main_window->y();
+
     auto applet_window = TRY(GUI::Window::try_create());
     applet_window->set_title("ClipboardHistory");
     applet_window->set_window_type(GUI::WindowType::Applet);
@@ -68,14 +72,17 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
     auto icon_widget = TRY(applet_window->try_set_main_widget<GUI::ImageWidget>());
     icon_widget->set_tooltip("Clipboard History");
     icon_widget->load_from_file("/res/icons/16x16/edit-copy.png"sv);
-    icon_widget->on_click = [&main_window = *main_window] {
+    icon_widget->on_click = [&main_window = *main_window, &saved_x, &saved_y] {
         if (main_window.is_visible()) {
             if (main_window.is_active()) {
+                saved_x = main_window.x();
+                saved_y = main_window.y();
                 main_window.hide();
             } else {
                 main_window.move_to_front();
             }
         } else {
+            main_window.set_rect(saved_x, saved_y, main_window.width(), main_window.height());
             main_window.show();
             main_window.move_to_front();
         }
