@@ -69,8 +69,16 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
     icon_widget->set_tooltip("Clipboard History");
     icon_widget->load_from_file("/res/icons/16x16/edit-copy.png"sv);
     icon_widget->on_click = [&main_window = *main_window] {
-        main_window.show();
-        main_window.move_to_front();
+        if (main_window.is_visible()) {
+            if (main_window.is_active()) {
+                main_window.hide();
+            } else {
+                main_window.move_to_front();
+            }
+        } else {
+            main_window.show();
+            main_window.move_to_front();
+        }
     };
     applet_window->resize(16, 16);
     applet_window->show();
