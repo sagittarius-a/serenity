@@ -18,7 +18,7 @@
 
 ErrorOr<int> serenity_main(Main::Arguments arguments)
 {
-    TRY(Core::System::pledge("stdio recvfd sendfd rpath unix cpath"));
+    TRY(Core::System::pledge("stdio recvfd sendfd rpath unix cpath wpath"));
     auto app = TRY(GUI::Application::try_create(arguments));
     auto clipboard_config = TRY(Core::ConfigFile::open_for_app("KeyboardSettings"));
     bool persistent_clipboard = clipboard_config->read_bool_entry("StartupEnable", "PersistentClipboard", false);
@@ -29,9 +29,9 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
 
     Config::pledge_domain("ClipboardHistory");
     Config::monitor_domain("ClipboardHistory");
-    TRY(Core::System::pledge("stdio recvfd sendfd rpath"));
+    TRY(Core::System::pledge("stdio recvfd sendfd rpath wpath cpath"));
     TRY(Core::System::unveil("/res", "r"));
-    TRY(Core::System::unveil(clipboard_file_path_builder.string_view(), "r"sv));
+    TRY(Core::System::unveil(clipboard_file_path_builder.string_view(), "cwr"sv));
     TRY(Core::System::unveil(nullptr, nullptr));
     auto app_icon = TRY(GUI::Icon::try_create_default_icon("edit-copy"sv));
 
@@ -45,9 +45,11 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
     table_view->set_model(model);
 
     if (persistent_clipboard) {
+        dbgln("Loading content from persistent clipboard");
+
         auto clipboard_file = Core::File::open(clipboard_file_path_builder.to_string(), Core::OpenMode::ReadOnly).value();
-        auto file_contents = clipboard_file->read_all();
-        auto json_or_error = JsonValue::from_string(file_contents);
+        auto file_content = clipboard_file->read_all();
+        auto json_or_error = JsonValue::from_string(file_content);
 
         if (json_or_error.is_error()) {
             dbgln("Failed to parse persistent clipboard file {}", clipboard_file_path_builder.string_view());
@@ -55,14 +57,16 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
             auto json = json_or_error.release_value();
             json.as_array().for_each([&model = *model](JsonValue const& object) {
                 if (object.as_object().has("Data"sv) && object.as_object().has("Type"sv)) {
-                    auto data_bytes = object.as_object().get("Data"sv).to_string().bytes();
-                    auto mime_type = object.as_object().get("Type"sv).to_string();
-                    HashMap<String, String> metadata;
 
+                    HashMap<String, String> metadata;
+                    auto mime_type = object.as_object().get("Type"sv).to_string();
+                    auto data_bytes = object.as_object().get("Data"sv).to_string().bytes();
                     auto data = ByteBuffer::copy(data_bytes.data(), data_bytes.size());
+
                     if (!data.is_error()) {
+                        bool is_persistent = true;
                         GUI::Clipboard::DataAndType item = { data.release_value(), mime_type, metadata };
-                        model.add_item(item);
+                        model.add_item(item, is_persistent);
                     }
                 }
             });
@@ -84,12 +88,77 @@ ErrorOr<int> serenity_main(Main::Arguments arguments)
         });
     });
 
+    auto persistent_toggle_action = GUI::Action::create("Toggle persistence", [&](const GUI::Action&) {
+        table_view->selection().for_each_index([&](GUI::ModelIndex& index) {
+
+            StringBuilder data_str_builder;
+            auto& data_and_type = model->item_at(index.row()).data_and_type;
+            data_str_builder.append(data_and_type.data);
+            auto data_str = data_str_builder.to_string();
+
+            auto clipboard_entry_index = index.row();
+            bool current_persistence_state = model->is_persistent(clipboard_entry_index);
+
+            auto clipboard_file = Core::File::open(clipboard_file_path_builder.to_string(), Core::OpenMode::ReadOnly).value();
+            auto clipboard_content = clipboard_file->read_all();
+            auto json_or_error = JsonValue::from_string(clipboard_content);
+            if (json_or_error.is_error()) {
+                dbgln("Failed to parse persistent clipboard file {}", clipboard_file_path_builder.string_view());
+                return;
+            }
+
+            auto clipboard_json = json_or_error.release_value();
+
+            JsonArray new_entries;
+
+            if (!current_persistence_state) {
+                if (data_and_type.mime_type == "text/plain" && data_str.length() < 128) {
+                    dbgln("Setting clipboard entry persistent: {}", data_str);
+                }
+
+                clipboard_json.as_array().for_each([&](auto& entry) {
+                    new_entries.append(entry);
+                });
+
+                JsonObject t;
+                t.set("Data", data_str);
+                t.set("Type", data_and_type.mime_type);
+                JsonValue new_entry_object = JsonValue::from_string(t.to_string()).value();
+
+                new_entries.append(new_entry_object);
+            } else {
+                if (data_and_type.mime_type == "text/plain" && data_str.length() < 128) {
+                    dbgln("Removing clipboard entry from persistent clipboard: {}", data_str);
+                }
+
+                clipboard_json.as_array().for_each([&](auto& entry) {
+                    auto mime_type = entry.as_object().get("Type"sv).to_string();
+                    auto data = entry.as_object().get("Data"sv).to_string();
+
+                    if (!((mime_type == data_and_type.mime_type) && (data == data_str))){
+                        new_entries.append(entry);
+                    }
+                });
+            }
+
+            auto clipboard_file_w = Core::File::open(clipboard_file_path_builder.to_string(), Core::OpenMode::WriteOnly | Core::OpenMode::Truncate).value();
+            bool written = clipboard_file_w->write(new_entries.to_string());
+            if (written)
+                model->set_persistence_value(clipboard_entry_index, !current_persistence_state);
+        });
+    });
+
     auto entry_context_menu = TRY(GUI::Menu::try_create());
     TRY(entry_context_menu->try_add_action(delete_action));
     TRY(entry_context_menu->try_add_action(debug_dump_action));
+    TRY(entry_context_menu->try_add_action(persistent_toggle_action));
+
     table_view->on_context_menu_request = [&](GUI::ModelIndex const&, GUI::ContextMenuEvent const& event) {
         delete_action->set_enabled(!table_view->selection().is_empty());
         debug_dump_action->set_enabled(!table_view->selection().is_empty());
+        persistent_toggle_action->set_enabled(
+            (!table_view->selection().is_empty()) && (persistent_clipboard)
+        );
         entry_context_menu->popup(event.screen_position());
     };
 

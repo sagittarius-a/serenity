@@ -32,6 +32,8 @@ String ClipboardHistoryModel::column_name(int column) const
         return "Size";
     case Column::Time:
         return "Time";
+    case Column::Persistent:
+        return "P";
     default:
         VERIFY_NOT_REACHED();
     }
@@ -105,12 +107,19 @@ GUI::Variant ClipboardHistoryModel::data(const GUI::ModelIndex& index, GUI::Mode
         return AK::human_readable_size(data_and_type.data.size());
     case Column::Time:
         return time.to_string();
+    case Column::Persistent:
+        if (item.is_persistent) {
+            return "*";
+        }
+        else {
+            return " ";
+        }
     default:
         VERIFY_NOT_REACHED();
     }
 }
 
-void ClipboardHistoryModel::add_item(const GUI::Clipboard::DataAndType& item)
+void ClipboardHistoryModel::add_item(const GUI::Clipboard::DataAndType& item, bool is_persistent)
 {
     m_history_items.remove_first_matching([&](ClipboardItem& existing) {
         return existing.data_and_type.data == item.data && existing.data_and_type.mime_type == item.mime_type;
@@ -119,13 +128,23 @@ void ClipboardHistoryModel::add_item(const GUI::Clipboard::DataAndType& item)
     if (m_history_items.size() == m_history_limit)
         m_history_items.take_last();
 
-    m_history_items.prepend({ item, Core::DateTime::now() });
+    m_history_items.prepend({ item, Core::DateTime::now(), is_persistent });
     invalidate();
 }
 
 void ClipboardHistoryModel::remove_item(int index)
 {
     m_history_items.remove(index);
+}
+
+void ClipboardHistoryModel::set_persistence_value(int index, bool value)
+{
+    m_history_items[index].is_persistent = value;
+}
+
+bool ClipboardHistoryModel::is_persistent(int index)
+{
+    return m_history_items[index].is_persistent;
 }
 
 void ClipboardHistoryModel::config_string_did_change(String const& domain, String const& group, String const& key, String const& value_string)

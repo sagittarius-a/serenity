@@ -21,6 +21,7 @@ public:
     static NonnullRefPtr<ClipboardHistoryModel> create();
 
     enum Column {
+        Persistent,
         Data,
         Type,
         Size,
@@ -31,13 +32,16 @@ public:
     struct ClipboardItem {
         GUI::Clipboard::DataAndType data_and_type;
         Core::DateTime time;
+        bool is_persistent = false;
     };
 
     virtual ~ClipboardHistoryModel() override = default;
 
     ClipboardItem const& item_at(int index) const { return m_history_items[index]; }
     void remove_item(int index);
-    void add_item(const GUI::Clipboard::DataAndType& item);
+    void set_persistence_value(int index, bool value);
+    bool is_persistent(int index);
+    void add_item(const GUI::Clipboard::DataAndType& item, bool is_persistent = false);
 
     // ^GUI::Model
     virtual GUI::Variant data(const GUI::ModelIndex&, GUI::ModelRole) const override;
